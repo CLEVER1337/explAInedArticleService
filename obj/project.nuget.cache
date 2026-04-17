@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "ExD+LNkq9AQ=",
+  "success": true,
+  "projectFilePath": "/home/clever/Documents/explAInedArticleService/explAInedArticleService.csproj",
+  "expectedPackageFiles": [
+    "/home/clever/.nuget/packages/microsoft.aspnetcore.app.ref/10.0.4/microsoft.aspnetcore.app.ref.10.0.4.nupkg.sha512"
+  ],
+  "logs": []
+}
