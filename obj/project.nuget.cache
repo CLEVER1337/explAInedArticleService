@@ -1,9 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "ExD+LNkq9AQ=",
+  "dgSpecHash": "qWRnnTqEYao=",
   "success": true,
   "projectFilePath": "/home/clever/Documents/explAInedArticleService/explAInedArticleService.csproj",
   "expectedPackageFiles": [
+    "/home/clever/.nuget/packages/elastic.clients.elasticsearch/9.3.4/elastic.clients.elasticsearch.9.3.4.nupkg.sha512",
+    "/home/clever/.nuget/packages/elastic.esql/0.10.0/elastic.esql.0.10.0.nupkg.sha512",
+    "/home/clever/.nuget/packages/elastic.transport/0.15.1/elastic.transport.0.15.1.nupkg.sha512",
     "/home/clever/.nuget/packages/microsoft.aspnetcore.app.ref/10.0.4/microsoft.aspnetcore.app.ref.10.0.4.nupkg.sha512"
   ],
   "logs": []

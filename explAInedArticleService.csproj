@@ -7,4 +7,8 @@
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.3.4" />
+  </ItemGroup>
+
 </Project>

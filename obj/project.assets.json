@@ -1,11 +1,136 @@
 {
   "version": 3,
   "targets": {
-    "net10.0": {}
+    "net10.0": {
+      "Elastic.Clients.Elasticsearch/9.3.4": {
+        "type": "package",
+        "dependencies": {
+          "Elastic.Esql": "0.10.0",
+          "Elastic.Transport": "0.15.1"
+        },
+        "compile": {
+          "lib/net10.0/Elastic.Clients.Elasticsearch.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net10.0/Elastic.Clients.Elasticsearch.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "Elastic.Esql/0.10.0": {
+        "type": "package",
+        "compile": {
+          "lib/net10.0/Elastic.Esql.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/net10.0/Elastic.Esql.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "Elastic.Transport/0.15.1": {
+        "type": "package",
+        "compile": {
+          "lib/net10.0/Elastic.Transport.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/net10.0/Elastic.Transport.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      }
+    }
   },
-  "libraries": {},
+  "libraries": {
+    "Elastic.Clients.Elasticsearch/9.3.4": {
+      "sha512": "06N4iTCAdqCxRbUleIVig7A0+kUX76j5u2/bfjcHCMLCf2iWFxgoG4jAbybVQTNHxy5LlWEQT4Y/ueMHk7z6CA==",
+      "type": "package",
+      "path": "elastic.clients.elasticsearch/9.3.4",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.txt",
+        "README.md",
+        "elastic.clients.elasticsearch.9.3.4.nupkg.sha512",
+        "elastic.clients.elasticsearch.nuspec",
+        "lib/net10.0/Elastic.Clients.Elasticsearch.dll",
+        "lib/net10.0/Elastic.Clients.Elasticsearch.xml",
+        "lib/net462/Elastic.Clients.Elasticsearch.dll",
+        "lib/net462/Elastic.Clients.Elasticsearch.xml",
+        "lib/net8.0/Elastic.Clients.Elasticsearch.dll",
+        "lib/net8.0/Elastic.Clients.Elasticsearch.xml",
+        "lib/net9.0/Elastic.Clients.Elasticsearch.dll",
+        "lib/net9.0/Elastic.Clients.Elasticsearch.xml",
+        "lib/netstandard2.0/Elastic.Clients.Elasticsearch.dll",
+        "lib/netstandard2.0/Elastic.Clients.Elasticsearch.xml",
+        "lib/netstandard2.1/Elastic.Clients.Elasticsearch.dll",
+        "lib/netstandard2.1/Elastic.Clients.Elasticsearch.xml",
+        "nuget-icon.png"
+      ]
+    },
+    "Elastic.Esql/0.10.0": {
+      "sha512": "wZZI3iJu0ClxZxTKom88zAbSSEaTOqarnoTfmSdn7C+TV24XIpNtjJ6PIvPmoUOdNowsbW9j6eOJraNHDU8LsA==",
+      "type": "package",
+      "path": "elastic.esql/0.10.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "elastic.esql.0.10.0.nupkg.sha512",
+        "elastic.esql.nuspec",
+        "lib/net10.0/Elastic.Esql.dll",
+        "lib/net10.0/Elastic.Esql.pdb",
+        "lib/net10.0/Elastic.Esql.xml",
+        "lib/net8.0/Elastic.Esql.dll",
+        "lib/net8.0/Elastic.Esql.pdb",
+        "lib/net8.0/Elastic.Esql.xml",
+        "lib/netstandard2.0/Elastic.Esql.dll",
+        "lib/netstandard2.0/Elastic.Esql.pdb",
+        "lib/netstandard2.0/Elastic.Esql.xml",
+        "license.txt",
+        "nuget-icon.png"
+      ]
+    },
+    "Elastic.Transport/0.15.1": {
+      "sha512": "p/MWttUhpU6kY3Hdx1ZGRUiOrejCaghit2E9M5cpeuwNQ7dkiolEAM6k7ewwKwEfRz53z6P9Z1GClZ6pi6H2RQ==",
+      "type": "package",
+      "path": "elastic.transport/0.15.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "elastic.transport.0.15.1.nupkg.sha512",
+        "elastic.transport.nuspec",
+        "lib/net10.0/Elastic.Transport.dll",
+        "lib/net10.0/Elastic.Transport.pdb",
+        "lib/net10.0/Elastic.Transport.xml",
+        "lib/net462/Elastic.Transport.dll",
+        "lib/net462/Elastic.Transport.pdb",
+        "lib/net462/Elastic.Transport.xml",
+        "lib/net8.0/Elastic.Transport.dll",
+        "lib/net8.0/Elastic.Transport.pdb",
+        "lib/net8.0/Elastic.Transport.xml",
+        "lib/netstandard2.0/Elastic.Transport.dll",
+        "lib/netstandard2.0/Elastic.Transport.pdb",
+        "lib/netstandard2.0/Elastic.Transport.xml",
+        "lib/netstandard2.1/Elastic.Transport.dll",
+        "lib/netstandard2.1/Elastic.Transport.pdb",
+        "lib/netstandard2.1/Elastic.Transport.xml",
+        "license.txt",
+        "nuget-icon.png"
+      ]
+    }
+  },
   "projectFileDependencyGroups": {
-    "net10.0": []
+    "net10.0": [
+      "Elastic.Clients.Elasticsearch >= 9.3.4"
+    ]
   },
   "packageFolders": {
     "/home/clever/.nuget/packages/": {}
@@ -49,6 +174,12 @@
     "frameworks": {
       "net10.0": {
         "targetAlias": "net10.0",
+        "dependencies": {
+          "Elastic.Clients.Elasticsearch": {
+            "target": "Package",
+            "version": "[9.3.4, )"
+          }
+        },
         "imports": [
           "net461",
           "net462",
