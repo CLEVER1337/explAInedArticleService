@@ -1,6 +1,5 @@
 using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.QueryDsl;
-using explAInedArticleService.Models;
 
 public class ArticleService
 {
