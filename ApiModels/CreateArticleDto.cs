@@ -1,0 +1,1 @@
+public record CreateArticleDto(string Title, string Content, string Description, string Tags, string AccessLevel);
