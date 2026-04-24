@@ -8,10 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="explAInedArticleService.Tests\**" />
-    <Content Remove="explAInedArticleService.Tests\**" />
-    <EmbeddedResource Remove="explAInedArticleService.Tests\**" />
-    <None Remove="explAInedArticleService.Tests\**" />
+    <Compile Remove="tests\**" />
+    <Content Remove="tests\**" />
+    <EmbeddedResource Remove="tests\**" />
+    <None Remove="tests\**" />
   </ItemGroup>
 
   <ItemGroup>
