@@ -8,6 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="explAInedArticleService.Tests\**" />
+    <Content Remove="explAInedArticleService.Tests\**" />
+    <EmbeddedResource Remove="explAInedArticleService.Tests\**" />
+    <None Remove="explAInedArticleService.Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.17.0" />
     <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.3.4" />

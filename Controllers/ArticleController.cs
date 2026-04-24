@@ -5,9 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 [Route("articles")]
 public class ArticleController : Controller
 {
-    private readonly ArticleService _articleService;
+    private readonly IArticleService _articleService;
 
-    public ArticleController(ArticleService articleService)
+    public ArticleController(IArticleService articleService)
     {
         _articleService = articleService;
     }

@@ -1,7 +1,16 @@
 using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.QueryDsl;
 
-public class ArticleService
+public interface IArticleService
+{
+    Task<IEnumerable<Article>> GetArticlesByQueryAsync(string query);
+    Task<Article> GetArticleByIdAsync(string id);
+    Task<string> SaveArticleAsync(Article article, string authorId);
+    Task UpdateArticleAsync(Article article);
+    Task ArchiveArticleAsync(string id);
+}
+
+public class ArticleService : IArticleService
 {
     private readonly ElasticsearchClient _elasticsearchClient;
 

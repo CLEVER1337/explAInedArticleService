@@ -42,7 +42,7 @@ builder.Services.AddSingleton<ElasticsearchClient>(sp => {
     return new ElasticsearchClient(settings);
 });
 
-builder.Services.AddScoped<ArticleService>();
+builder.Services.AddScoped<IArticleService, ArticleService>();
 
 var app = builder.Build();
 
