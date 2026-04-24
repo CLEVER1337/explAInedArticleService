@@ -59,7 +59,11 @@ public class ArticleService
 
         if (!response.IsValidResponse)
         {
-            throw new Exception($"Failed to save article with id {article.Id}");
+            throw new Exception(
+                $"Failed to save article with id {article.Id}. " +
+                $"ServerError: {response.ElasticsearchServerError}. " +
+                $"Debug: {response.DebugInformation}",
+                response.ApiCallDetails?.OriginalException);
         }
 
         return article.Id;

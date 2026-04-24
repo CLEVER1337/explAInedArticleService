@@ -1,0 +1,1 @@
+public record UpdateArticleDto(string Title, string Content, string Description, string Tags, string AccessLevel, string Status);
