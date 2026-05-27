@@ -1,5 +1,8 @@
+using System.Text.Json;
 using Elastic.Clients.Elasticsearch;
+using Elastic.Clients.Elasticsearch.Core.Search;
 using Elastic.Clients.Elasticsearch.QueryDsl;
+using Microsoft.EntityFrameworkCore;
 
 public interface IArticleService
 {
@@ -12,17 +15,53 @@ public interface IArticleService
 
 public class ArticleService : IArticleService
 {
-    private readonly ElasticsearchClient _elasticsearchClient;
+    private const string IndexName = "articles";
+    private const int CacheTtlSeconds = 60;
+    private const int SearchCacheTtlSeconds = 30;
 
-    public ArticleService(ElasticsearchClient elasticsearchClient)
+    private readonly ApplicationDbContext _db;
+    private readonly ElasticsearchClient _elasticsearchClient;
+    private readonly CacheService _cache;
+    private readonly ILogger<ArticleService> _logger;
+
+    public ArticleService(
+        ApplicationDbContext db,
+        ElasticsearchClient elasticsearchClient,
+        CacheService cache,
+        ILogger<ArticleService> logger)
     {
+        _db = db;
         _elasticsearchClient = elasticsearchClient;
+        _cache = cache;
+        _logger = logger;
     }
 
     public async Task<IEnumerable<Article>> GetArticlesByQueryAsync(string query)
     {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return Array.Empty<Article>();
+        }
+
+        var key = SearchCacheKey(query);
+
+        try
+        {
+            var cached = await _cache.GetValue(key);
+            if (cached is not null)
+            {
+                var deserialized = JsonSerializer.Deserialize<List<Article>>(cached);
+                if (deserialized is not null) return deserialized;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Cache read failed for {Key}", key);
+        }
+
         var response = await _elasticsearchClient.SearchAsync<Article>(s => s
-            .Index("articles")
+            .Index(IndexName)
+            .Source(new SourceConfig(false))
             .Query(q => q
                 .Bool(b => b
                     .Must(m => m
@@ -38,24 +77,68 @@ public class ArticleService : IArticleService
                 )
             )
         );
-        return response.Documents;
+
+        var orderedIds = response.Hits.Select(h => h.Id).Where(id => !string.IsNullOrEmpty(id)).ToList();
+        if (orderedIds.Count == 0) return Array.Empty<Article>();
+
+        var articles = await _db.Articles.AsNoTracking()
+            .Where(a => orderedIds.Contains(a.Id))
+            .ToListAsync();
+
+        var map = articles.ToDictionary(a => a.Id);
+        var ordered = orderedIds.Where(map.ContainsKey).Select(id => map[id]).ToList();
+
+        try
+        {
+            await _cache.SetValue(key, JsonSerializer.Serialize(ordered), TimeSpan.FromSeconds(SearchCacheTtlSeconds));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Cache write failed for {Key}", key);
+        }
+
+        return ordered;
     }
 
     public async Task<Article> GetArticleByIdAsync(string id)
     {
-        var response = await _elasticsearchClient.GetAsync<Article>(id, g => g.Index("articles"));
+        var key = ArticleCacheKey(id);
 
-        if (!response.IsValidResponse)
+        try
         {
-            throw new Exception($"Failed to get article with id {id}");
+            var cached = await _cache.GetValue(key);
+            if (cached is not null)
+            {
+                var deserialized = JsonSerializer.Deserialize<Article>(cached);
+                if (deserialized is not null) return deserialized;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Cache read failed for {Key}", key);
         }
 
-        return response.Source;
+        var article = await _db.Articles.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id);
+        if (article == null)
+        {
+            throw new KeyNotFoundException($"Article with id {id} not found");
+        }
+
+        try
+        {
+            await _cache.SetValue(key, JsonSerializer.Serialize(article), TimeSpan.FromSeconds(CacheTtlSeconds));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Cache write failed for {Key}", key);
+        }
+
+        return article;
     }
 
     public async Task<string> SaveArticleAsync(Article article, string authorId)
     {
-        article.Id = Guid.NewGuid().ToString(); 
+        article.Id = Guid.NewGuid().ToString();
         article.PublishedAt = DateTime.UtcNow;
         article.UpdatedAt = DateTime.UtcNow;
         article.ArchivedAt = null;
@@ -64,45 +147,74 @@ public class ArticleService : IArticleService
         article.AuthorId = authorId;
         article.Status = ArticleStatus.Draft;
 
-        var response = await _elasticsearchClient.IndexAsync(article, i => i.Index("articles"));
-
-        if (!response.IsValidResponse)
-        {
-            throw new Exception(
-                $"Failed to save article with id {article.Id}. " +
-                $"ServerError: {response.ElasticsearchServerError}. " +
-                $"Debug: {response.DebugInformation}",
-                response.ApiCallDetails?.OriginalException);
-        }
+        await WriteWithOutboxAsync(() => _db.Articles.Add(article), "ArticleCreated", article.Id);
 
         return article.Id;
     }
 
     public async Task UpdateArticleAsync(Article article)
     {
-        var response = await _elasticsearchClient.UpdateAsync<Article, Article>("articles", article.Id, u => u.Doc(article));
-
-        if (!response.IsValidResponse)
-        {
-            throw new Exception($"Failed to update article with id {article.Id}");
-        }
+        article.UpdatedAt = DateTime.UtcNow;
+        await WriteWithOutboxAsync(() => _db.Articles.Update(article), "ArticleUpdated", article.Id);
+        await InvalidateArticleCache(article.Id);
     }
 
     public async Task ArchiveArticleAsync(string id)
     {
-        var article = await GetArticleByIdAsync(id);
+        var article = await _db.Articles.FirstOrDefaultAsync(a => a.Id == id);
+        if (article == null)
+        {
+            throw new KeyNotFoundException($"Article with id {id} not found");
+        }
+
         article.ArchivedAt = DateTime.UtcNow;
+        article.UpdatedAt = DateTime.UtcNow;
         article.Status = ArticleStatus.Archived;
-        await UpdateArticleAsync(article);
+
+        await WriteWithOutboxAsync(() => { }, "ArticleArchived", article.Id);
+        await InvalidateArticleCache(article.Id);
     }
 
-    private async Task DeleteArticleAsync(string id)
+    private async Task InvalidateArticleCache(string id)
     {
-        var response = await _elasticsearchClient.DeleteAsync(id, d => d.Index("articles"));
-
-        if (!response.IsValidResponse)
+        try
         {
-            throw new Exception($"Failed to delete article with id {id}");
+            await _cache.RemoveValue(ArticleCacheKey(id));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Cache invalidation failed for article {Id}", id);
         }
     }
+
+    private async Task WriteWithOutboxAsync(Action mutate, string eventType, string aggregateId)
+    {
+        var supportsTransactions = _db.Database.IsRelational();
+        var tx = supportsTransactions ? await _db.Database.BeginTransactionAsync() : null;
+        try
+        {
+            mutate();
+            _db.OutboxEvents.Add(new OutboxEvent
+            {
+                EventType = eventType,
+                AggregateId = aggregateId,
+                Payload = JsonSerializer.Serialize(new { id = aggregateId, eventType }),
+                CreatedAt = DateTime.UtcNow,
+            });
+            await _db.SaveChangesAsync();
+            if (tx != null) await tx.CommitAsync();
+        }
+        catch
+        {
+            if (tx != null) await tx.RollbackAsync();
+            throw;
+        }
+        finally
+        {
+            if (tx != null) await tx.DisposeAsync();
+        }
+    }
+
+    private static string ArticleCacheKey(string id) => $"articles:{id}";
+    private static string SearchCacheKey(string query) => $"articles:search:{query.Trim().ToLowerInvariant()}";
 }
