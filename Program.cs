@@ -1,6 +1,8 @@
+using Confluent.Kafka;
 using Elastic.Clients.Elasticsearch;
 using Elastic.Transport;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Prometheus;
 using System.Text;
@@ -12,6 +14,20 @@ builder.Configuration.AddJsonFile("appsettings.json");
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+
+var dbProvider = builder.Configuration["Database:Provider"] ?? "Postgres";
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    if (string.Equals(dbProvider, "InMemory", StringComparison.OrdinalIgnoreCase))
+    {
+        var dbName = builder.Configuration["Database:InMemoryName"] ?? "explAIned-articles-tests";
+        options.UseInMemoryDatabase(dbName);
+    }
+    else
+    {
+        options.UseNpgsql(builder.Configuration["ConnectionStrings:PostgreSQL"]);
+    }
+});
 
 builder.Services.AddAuthentication(options =>
     {
@@ -43,9 +59,38 @@ builder.Services.AddSingleton<ElasticsearchClient>(sp => {
     return new ElasticsearchClient(settings);
 });
 
+builder.Services.Configure<KafkaSettings>(builder.Configuration.GetSection("Kafka"));
+
+builder.Services.AddSingleton<IProducer<string, string>>(sp =>
+{
+    var producerConfig = new ProducerConfig
+    {
+        BootstrapServers = builder.Configuration["Kafka:BootstrapServers"],
+        Acks = Acks.All,
+        EnableIdempotence = true,
+    };
+    return new ProducerBuilder<string, string>(producerConfig).Build();
+});
+
+builder.Services.AddHostedService<OutboxPublisherHostedService>();
+builder.Services.AddHostedService<ElasticsearchIndexerHostedService>();
+
 builder.Services.AddScoped<IArticleService, ArticleService>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    if (db.Database.IsRelational())
+    {
+        db.Database.Migrate();
+    }
+    else
+    {
+        db.Database.EnsureCreated();
+    }
+}
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
