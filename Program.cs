@@ -75,6 +75,21 @@ builder.Services.AddSingleton<IProducer<string, string>>(sp =>
 builder.Services.AddHostedService<OutboxPublisherHostedService>();
 builder.Services.AddHostedService<ElasticsearchIndexerHostedService>();
 
+var cacheProvider = builder.Configuration["Cache:Provider"] ?? "Redis";
+if (string.Equals(cacheProvider, "Memory", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddDistributedMemoryCache();
+}
+else
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = builder.Configuration["ConnectionStrings:Redis"];
+        options.InstanceName = "explAIned_";
+    });
+}
+
+builder.Services.AddScoped<CacheService>();
 builder.Services.AddScoped<IArticleService, ArticleService>();
 
 var app = builder.Build();
