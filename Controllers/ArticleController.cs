@@ -7,11 +7,13 @@ public class ArticleController : Controller
 {
     private readonly IArticleService _articleService;
 
-    public ArticleController(IArticleService articleService)
+    public ArticleController(IArticleService articleService, IUserEventProducer userEventProducer)
+    private readonly IUserEventProducer _userEventProducer;
     {
         _articleService = articleService;
     }
 
+        _userEventProducer = userEventProducer;
     [HttpGet]
     [Route("search")]
     public async Task<IResult> SearchArticles([FromQuery] string query)
@@ -172,3 +174,71 @@ public class ArticleController : Controller
         }
     }
 }
+
+    [HttpPost]
+    [Route("{id}/click")]
+    [Authorize]
+    public Task<IResult> Click([FromRoute] string id, CancellationToken ct)
+        => EmitUserEvent(id, "ArticleClicked", metadata: null, success: Results.Accepted(), ct);
+
+    [HttpPost]
+    [Route("{id}/read")]
+    [Authorize]
+    public Task<IResult> Read([FromRoute] string id, CancellationToken ct)
+        => EmitUserEvent(id, "ArticleRead", metadata: null, success: Results.Accepted(), ct);
+
+    [HttpPost]
+    [Route("{id}/like")]
+    [Authorize]
+    public Task<IResult> Like([FromRoute] string id, CancellationToken ct)
+        => EmitUserEvent(id, "ArticleLiked", metadata: null, success: Results.NoContent(), ct);
+
+    [HttpPost]
+    [Route("{id}/dislike")]
+    [Authorize]
+    public Task<IResult> Dislike([FromRoute] string id, CancellationToken ct)
+        => EmitUserEvent(id, "ArticleDisliked", metadata: null, success: Results.NoContent(), ct);
+
+    [HttpPost]
+    [Route("{id}/share")]
+    [Authorize]
+    public Task<IResult> Share([FromRoute] string id, [FromBody] ShareArticleDto? dto, CancellationToken ct)
+    {
+        IDictionary<string, object?>? metadata = null;
+        if (!string.IsNullOrWhiteSpace(dto?.Channel))
+        {
+            metadata = new Dictionary<string, object?> { ["channel"] = dto.Channel };
+        }
+        return EmitUserEvent(id, "ArticleShared", metadata, success: Results.NoContent(), ct);
+    }
+
+    private async Task<IResult> EmitUserEvent(
+        string articleId,
+        string eventType,
+        IDictionary<string, object?>? metadata,
+        IResult success,
+        CancellationToken ct)
+    {
+        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (userId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            await _articleService.GetArticleByIdAsync(articleId);
+        }
+        catch (Exception ex)
+        {
+            return Results.NotFound(ex.Message);
+        }
+
+        await _userEventProducer.EmitAsync(eventType, userId, articleId, metadata, ct);
+        return success;
+    }
+}
+
+public class ShareArticleDto
+{
+    public string? Channel { get; set; }
