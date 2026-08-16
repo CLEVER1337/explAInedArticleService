@@ -247,4 +247,80 @@ public class ArticleEndpointsTests : IClassFixture<ArticleWebApplicationFactory>
 
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
     }
+
+    [Fact]
+    public async Task Batch_ReturnsArticles_InRequestedOrder()
+    {
+        var first = SeedPublished("first");
+        var second = SeedPublished("second");
+        var client = CreateClient();
+
+        var resp = await client.GetAsync($"/articles/batch?ids={second.Id},{first.Id}");
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var articles = await resp.Content.ReadFromJsonAsync<List<Article>>();
+        Assert.NotNull(articles);
+        Assert.Equal(new[] { second.Id, first.Id }, articles!.Select(a => a.Id));
+    }
+
+    [Fact]
+    public async Task Batch_WithoutIds_Returns400()
+    {
+        var client = CreateClient();
+
+        var resp = await client.GetAsync("/articles/batch");
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Batch_SkipsNonPublicArticles()
+    {
+        var published = SeedPublished("visible");
+        var draft = _factory.FakeService.Seed(new Article
+        {
+            Title = "draft",
+            Content = "c",
+            Description = "d",
+            Tags = "t",
+            Status = ArticleStatus.Draft,
+            AccessLevel = AccessLevel.Public,
+            AuthorId = AuthorId,
+        });
+        var client = CreateClient();
+
+        var resp = await client.GetAsync($"/articles/batch?ids={draft.Id},{published.Id}");
+
+        var articles = await resp.Content.ReadFromJsonAsync<List<Article>>();
+        Assert.NotNull(articles);
+        Assert.Equal(new[] { published.Id }, articles!.Select(a => a.Id));
+    }
+
+    [Fact]
+    public async Task Recent_ReturnsNewestFirst()
+    {
+        var older = SeedPublished("older", DateTime.UtcNow.AddDays(-2));
+        var newer = SeedPublished("newer", DateTime.UtcNow);
+        var client = CreateClient();
+
+        var resp = await client.GetAsync("/articles/recent?limit=10");
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var articles = await resp.Content.ReadFromJsonAsync<List<Article>>();
+        Assert.NotNull(articles);
+        Assert.Equal(new[] { newer.Id, older.Id }, articles!.Select(a => a.Id));
+    }
+
+    private Article SeedPublished(string title, DateTime? publishedAt = null) =>
+        _factory.FakeService.Seed(new Article
+        {
+            Title = title,
+            Content = "c",
+            Description = "d",
+            Tags = "t",
+            Status = ArticleStatus.Published,
+            AccessLevel = AccessLevel.Public,
+            AuthorId = AuthorId,
+            PublishedAt = publishedAt ?? DateTime.UtcNow,
+        });
 }
