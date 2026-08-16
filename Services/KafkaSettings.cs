@@ -5,4 +5,5 @@ public class KafkaSettings
     public string ConsumerGroupId { get; set; } = default!;
     public int PublisherPollMs { get; set; } = 1000;
     public int PublisherBatchSize { get; set; } = 100;
+    public string UserEventsTopic { get; set; } = "user.events";
 }

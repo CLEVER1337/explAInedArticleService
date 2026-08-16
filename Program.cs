@@ -72,6 +72,8 @@ builder.Services.AddSingleton<IProducer<string, string>>(sp =>
     return new ProducerBuilder<string, string>(producerConfig).Build();
 });
 
+builder.Services.AddSingleton<IUserEventProducer, UserEventProducer>();
+
 builder.Services.AddHostedService<OutboxPublisherHostedService>();
 builder.Services.AddHostedService<ElasticsearchIndexerHostedService>();
 
