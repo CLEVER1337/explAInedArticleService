@@ -10,9 +10,9 @@ public class ArticleControllerTests
     private const string AuthorId = "author-123";
     private const string OtherUserId = "someone-else";
 
-    private static ArticleController Build(IArticleService service, string? sub = AuthorId)
+    private static ArticleController Build(IArticleService service, string? sub = AuthorId, IUserEventProducer? userEventProducer = null)
     {
-        var controller = new ArticleController(service);
+        var controller = new ArticleController(service, userEventProducer ?? new Mock<IUserEventProducer>().Object);
 
         var claims = sub is null ? Array.Empty<Claim>() : [new Claim(JwtRegisteredClaimNames.Sub, sub)];
         var identity = sub is null ? new ClaimsIdentity() : new ClaimsIdentity(claims, "TestAuth");
@@ -265,5 +265,80 @@ public class ArticleControllerTests
 
         Assert.Equal(StatusCodes.Status204NoContent, StatusOf(result));
         svc.Verify(s => s.ArchiveArticleAsync("id"), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData(",,")]
+    public async Task GetArticlesByIds_BadRequest_WhenIdsMissing(string? ids)
+    {
+        var svc = new Mock<IArticleService>();
+        var controller = Build(svc.Object);
+
+        var result = await controller.GetArticlesByIds(ids);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusOf(result));
+        svc.Verify(s => s.GetArticlesByIdsAsync(It.IsAny<IEnumerable<string>>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetArticlesByIds_BadRequest_WhenOverLimit()
+    {
+        var svc = new Mock<IArticleService>();
+        var controller = Build(svc.Object);
+
+        var result = await controller.GetArticlesByIds(string.Join(',', Enumerable.Range(0, 101).Select(i => $"a{i}")));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusOf(result));
+        svc.Verify(s => s.GetArticlesByIdsAsync(It.IsAny<IEnumerable<string>>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetArticlesByIds_PassesTrimmedIds_InOrder()
+    {
+        var svc = new Mock<IArticleService>();
+        IEnumerable<string>? captured = null;
+        svc.Setup(s => s.GetArticlesByIdsAsync(It.IsAny<IEnumerable<string>>()))
+            .Callback<IEnumerable<string>>(ids => captured = ids)
+            .ReturnsAsync(new[] { SampleArticle() });
+        var controller = Build(svc.Object);
+
+        var result = await controller.GetArticlesByIds("b , a,c");
+
+        Assert.Equal(StatusCodes.Status200OK, StatusOf(result));
+        Assert.Equal(new[] { "b", "a", "c" }, captured);
+    }
+
+    [Theory]
+    [InlineData(null, 20)]
+    [InlineData(0, 1)]
+    [InlineData(9999, 100)]
+    [InlineData(5, 5)]
+    public async Task GetRecentArticles_ClampsLimit(int? limit, int expected)
+    {
+        var svc = new Mock<IArticleService>();
+        svc.Setup(s => s.GetRecentArticlesAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(Array.Empty<Article>());
+        var controller = Build(svc.Object);
+
+        var result = await controller.GetRecentArticles(limit, offset: null);
+
+        Assert.Equal(StatusCodes.Status200OK, StatusOf(result));
+        svc.Verify(s => s.GetRecentArticlesAsync(expected, 0), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetRecentArticles_ClampsNegativeOffset()
+    {
+        var svc = new Mock<IArticleService>();
+        svc.Setup(s => s.GetRecentArticlesAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(Array.Empty<Article>());
+        var controller = Build(svc.Object);
+
+        await controller.GetRecentArticles(limit: 10, offset: -5);
+
+        svc.Verify(s => s.GetRecentArticlesAsync(10, 0), Times.Once);
     }
 }
