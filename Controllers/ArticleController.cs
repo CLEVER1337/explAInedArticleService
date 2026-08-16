@@ -5,15 +5,17 @@ using Microsoft.AspNetCore.Mvc;
 [Route("articles")]
 public class ArticleController : Controller
 {
+    private const int BatchMaxIds = 100;
+
     private readonly IArticleService _articleService;
+    private readonly IUserEventProducer _userEventProducer;
 
     public ArticleController(IArticleService articleService, IUserEventProducer userEventProducer)
-    private readonly IUserEventProducer _userEventProducer;
     {
         _articleService = articleService;
+        _userEventProducer = userEventProducer;
     }
 
-        _userEventProducer = userEventProducer;
     [HttpGet]
     [Route("search")]
     public async Task<IResult> SearchArticles([FromQuery] string query)
@@ -24,6 +26,44 @@ public class ArticleController : Controller
         {
             return Results.NotFound("No articles found");
         }
+
+        return Results.Ok(articles);
+    }
+
+    [HttpGet]
+    [Route("batch")]
+    public async Task<IResult> GetArticlesByIds([FromQuery] string? ids)
+    {
+        if (string.IsNullOrWhiteSpace(ids))
+        {
+            return Results.BadRequest("ids is required");
+        }
+
+        var idList = ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (idList.Length == 0)
+        {
+            return Results.BadRequest("ids is required");
+        }
+
+        if (idList.Length > BatchMaxIds)
+        {
+            return Results.BadRequest($"at most {BatchMaxIds} ids per request");
+        }
+
+        var articles = await _articleService.GetArticlesByIdsAsync(idList);
+
+        return Results.Ok(articles);
+    }
+
+    [HttpGet]
+    [Route("recent")]
+    public async Task<IResult> GetRecentArticles([FromQuery] int? limit, [FromQuery] int? offset)
+    {
+        var effectiveLimit = Math.Clamp(limit ?? 20, 1, 100);
+        var effectiveOffset = Math.Max(offset ?? 0, 0);
+
+        var articles = await _articleService.GetRecentArticlesAsync(effectiveLimit, effectiveOffset);
 
         return Results.Ok(articles);
     }
@@ -173,7 +213,6 @@ public class ArticleController : Controller
             return Results.Problem(ex.Message);
         }
     }
-}
 
     [HttpPost]
     [Route("{id}/click")]
@@ -242,3 +281,4 @@ public class ArticleController : Controller
 public class ShareArticleDto
 {
     public string? Channel { get; set; }
+}
