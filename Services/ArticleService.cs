@@ -10,6 +10,8 @@ public interface IArticleService
     Task<Article> GetArticleByIdAsync(string id);
     Task<IEnumerable<Article>> GetArticlesByIdsAsync(IEnumerable<string> ids);
     Task<IEnumerable<Article>> GetRecentArticlesAsync(int limit, int offset);
+    Task<IEnumerable<Article>> GetArticlesByAuthorAsync(string authorId, int limit, int offset);
+    Task<int> CountArticlesByAuthorAsync(string authorId);
     Task<string> SaveArticleAsync(Article article, string authorId);
     Task UpdateArticleAsync(Article article);
     Task ArchiveArticleAsync(string id);
@@ -21,6 +23,7 @@ public class ArticleService : IArticleService
     private const int CacheTtlSeconds = 60;
     private const int SearchCacheTtlSeconds = 30;
     private const int RecentCacheTtlSeconds = 30;
+    private const int ByAuthorCacheTtlSeconds = 30;
 
     private readonly ApplicationDbContext _db;
     private readonly ElasticsearchClient _elasticsearchClient;
@@ -183,6 +186,50 @@ public class ArticleService : IArticleService
         return articles;
     }
 
+    public async Task<IEnumerable<Article>> GetArticlesByAuthorAsync(string authorId, int limit, int offset)
+    {
+        var key = ByAuthorCacheKey(authorId, limit, offset);
+
+        try
+        {
+            var cached = await _cache.GetValue(key);
+            if (cached is not null)
+            {
+                var deserialized = JsonSerializer.Deserialize<List<Article>>(cached);
+                if (deserialized is not null) return deserialized;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Cache read failed for {Key}", key);
+        }
+
+        var articles = await ByAuthorQuery(authorId)
+            .OrderByDescending(a => a.PublishedAt)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync();
+
+        try
+        {
+            await _cache.SetValue(key, JsonSerializer.Serialize(articles), TimeSpan.FromSeconds(ByAuthorCacheTtlSeconds));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Cache write failed for {Key}", key);
+        }
+
+        return articles;
+    }
+
+    public Task<int> CountArticlesByAuthorAsync(string authorId) => ByAuthorQuery(authorId).CountAsync();
+
+    private IQueryable<Article> ByAuthorQuery(string authorId) =>
+        _db.Articles.AsNoTracking()
+            .Where(a => a.AuthorId == authorId
+                        && a.Status == ArticleStatus.Published
+                        && a.AccessLevel == AccessLevel.Public);
+
     private async Task<List<Article>> FetchOrderedAsync(IReadOnlyList<string> orderedIds, bool publicPublishedOnly)
     {
         var query = _db.Articles.AsNoTracking().Where(a => orderedIds.Contains(a.Id));
@@ -282,4 +329,7 @@ public class ArticleService : IArticleService
     private static string SearchCacheKey(string query) => $"articles:search:{query.Trim().ToLowerInvariant()}";
 
     private static string RecentCacheKey(int limit, int offset) => $"articles:recent:{limit}:{offset}";
+
+    private static string ByAuthorCacheKey(string authorId, int limit, int offset) =>
+        $"articles:by-author:{authorId}:{limit}:{offset}";
 }

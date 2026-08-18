@@ -69,6 +69,22 @@ public class ArticleController : Controller
     }
 
     [HttpGet]
+    [Route("by-author/{authorId}")]
+    public async Task<IResult> GetArticlesByAuthor(
+        [FromRoute] string authorId, [FromQuery] int? limit, [FromQuery] int? offset)
+    {
+        var effectiveLimit = Math.Clamp(limit ?? 20, 1, 100);
+        var effectiveOffset = Math.Max(offset ?? 0, 0);
+
+        var articles = await _articleService.GetArticlesByAuthorAsync(authorId, effectiveLimit, effectiveOffset);
+
+        Response.Headers["X-Total-Count"] =
+            (await _articleService.CountArticlesByAuthorAsync(authorId)).ToString();
+
+        return Results.Ok(articles);
+    }
+
+    [HttpGet]
     [Route("{id}")]
     public async Task<IResult> GetArticleById([FromRoute] string id)
     {
