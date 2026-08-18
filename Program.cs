@@ -3,29 +3,31 @@ using Elastic.Clients.Elasticsearch;
 using Elastic.Transport;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
 using Microsoft.IdentityModel.Tokens;
 using Prometheus;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// json config
-builder.Configuration.AddJsonFile("appsettings.json");
-
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 
-var dbProvider = builder.Configuration["Database:Provider"] ?? "Postgres";
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
+builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
 {
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var dbProvider = configuration["Database:Provider"] ?? "Postgres";
+
     if (string.Equals(dbProvider, "InMemory", StringComparison.OrdinalIgnoreCase))
     {
-        var dbName = builder.Configuration["Database:InMemoryName"] ?? "explAIned-articles-tests";
-        options.UseInMemoryDatabase(dbName);
+        options.UseInMemoryDatabase(
+            configuration["Database:InMemoryName"] ?? "explAIned-articles-tests");
     }
     else
     {
-        options.UseNpgsql(builder.Configuration["ConnectionStrings:PostgreSQL"]);
+        options.UseNpgsql(configuration["ConnectionStrings:PostgreSQL"]);
     }
 });
 
@@ -77,19 +79,23 @@ builder.Services.AddSingleton<IUserEventProducer, UserEventProducer>();
 builder.Services.AddHostedService<OutboxPublisherHostedService>();
 builder.Services.AddHostedService<ElasticsearchIndexerHostedService>();
 
-var cacheProvider = builder.Configuration["Cache:Provider"] ?? "Redis";
-if (string.Equals(cacheProvider, "Memory", StringComparison.OrdinalIgnoreCase))
+builder.Services.AddOptions();
+builder.Services.AddSingleton<MemoryDistributedCache>();
+builder.Services.AddSingleton<RedisCache>();
+builder.Services.Configure<RedisCacheOptions>(options =>
 {
-    builder.Services.AddDistributedMemoryCache();
-}
-else
+    options.Configuration = builder.Configuration["ConnectionStrings:Redis"];
+    options.InstanceName = "explAIned_";
+});
+
+builder.Services.AddSingleton<IDistributedCache>(sp =>
 {
-    builder.Services.AddStackExchangeRedisCache(options =>
-    {
-        options.Configuration = builder.Configuration["ConnectionStrings:Redis"];
-        options.InstanceName = "explAIned_";
-    });
-}
+    var cacheProvider = sp.GetRequiredService<IConfiguration>()["Cache:Provider"] ?? "Redis";
+
+    return string.Equals(cacheProvider, "Memory", StringComparison.OrdinalIgnoreCase)
+        ? sp.GetRequiredService<MemoryDistributedCache>()
+        : sp.GetRequiredService<RedisCache>();
+});
 
 builder.Services.AddScoped<CacheService>();
 builder.Services.AddScoped<IArticleService, ArticleService>();
