@@ -22,6 +22,51 @@ public class InMemoryArticleService : IArticleService
         return Task.FromResult(article);
     }
 
+    public Task<IEnumerable<Article>> GetArticlesByIdsAsync(IEnumerable<string> ids)
+    {
+        var ordered = ids.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList();
+
+        var matches = ordered
+            .Where(Store.ContainsKey)
+            .Select(id => Store[id])
+            .Where(a => a.Status == ArticleStatus.Published && a.AccessLevel == AccessLevel.Public)
+            .ToList();
+
+        return Task.FromResult<IEnumerable<Article>>(matches);
+    }
+
+    public Task<IEnumerable<Article>> GetRecentArticlesAsync(int limit, int offset)
+    {
+        var matches = Store.Values
+            .Where(a => a.Status == ArticleStatus.Published && a.AccessLevel == AccessLevel.Public)
+            .OrderByDescending(a => a.PublishedAt)
+            .Skip(offset)
+            .Take(limit)
+            .ToList();
+
+        return Task.FromResult<IEnumerable<Article>>(matches);
+    }
+
+    public Task<IEnumerable<Article>> GetArticlesByAuthorAsync(string authorId, int limit, int offset)
+    {
+        var matches = ByAuthor(authorId)
+            .OrderByDescending(a => a.PublishedAt)
+            .Skip(offset)
+            .Take(limit)
+            .ToList();
+
+        return Task.FromResult<IEnumerable<Article>>(matches);
+    }
+
+    public Task<int> CountArticlesByAuthorAsync(string authorId) =>
+        Task.FromResult(ByAuthor(authorId).Count());
+
+    private IEnumerable<Article> ByAuthor(string authorId) =>
+        Store.Values.Where(a =>
+            a.AuthorId == authorId
+            && a.Status == ArticleStatus.Published
+            && a.AccessLevel == AccessLevel.Public);
+
     public Task<string> SaveArticleAsync(Article article, string authorId)
     {
         article.Id = Guid.NewGuid().ToString();

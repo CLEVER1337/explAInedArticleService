@@ -5,11 +5,15 @@ using Microsoft.AspNetCore.Mvc;
 [Route("articles")]
 public class ArticleController : Controller
 {
-    private readonly IArticleService _articleService;
+    private const int BatchMaxIds = 100;
 
-    public ArticleController(IArticleService articleService)
+    private readonly IArticleService _articleService;
+    private readonly IUserEventProducer _userEventProducer;
+
+    public ArticleController(IArticleService articleService, IUserEventProducer userEventProducer)
     {
         _articleService = articleService;
+        _userEventProducer = userEventProducer;
     }
 
     [HttpGet]
@@ -22,6 +26,60 @@ public class ArticleController : Controller
         {
             return Results.NotFound("No articles found");
         }
+
+        return Results.Ok(articles);
+    }
+
+    [HttpGet]
+    [Route("batch")]
+    public async Task<IResult> GetArticlesByIds([FromQuery] string? ids)
+    {
+        if (string.IsNullOrWhiteSpace(ids))
+        {
+            return Results.BadRequest("ids is required");
+        }
+
+        var idList = ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (idList.Length == 0)
+        {
+            return Results.BadRequest("ids is required");
+        }
+
+        if (idList.Length > BatchMaxIds)
+        {
+            return Results.BadRequest($"at most {BatchMaxIds} ids per request");
+        }
+
+        var articles = await _articleService.GetArticlesByIdsAsync(idList);
+
+        return Results.Ok(articles);
+    }
+
+    [HttpGet]
+    [Route("recent")]
+    public async Task<IResult> GetRecentArticles([FromQuery] int? limit, [FromQuery] int? offset)
+    {
+        var effectiveLimit = Math.Clamp(limit ?? 20, 1, 100);
+        var effectiveOffset = Math.Max(offset ?? 0, 0);
+
+        var articles = await _articleService.GetRecentArticlesAsync(effectiveLimit, effectiveOffset);
+
+        return Results.Ok(articles);
+    }
+
+    [HttpGet]
+    [Route("by-author/{authorId}")]
+    public async Task<IResult> GetArticlesByAuthor(
+        [FromRoute] string authorId, [FromQuery] int? limit, [FromQuery] int? offset)
+    {
+        var effectiveLimit = Math.Clamp(limit ?? 20, 1, 100);
+        var effectiveOffset = Math.Max(offset ?? 0, 0);
+
+        var articles = await _articleService.GetArticlesByAuthorAsync(authorId, effectiveLimit, effectiveOffset);
+
+        Response.Headers["X-Total-Count"] =
+            (await _articleService.CountArticlesByAuthorAsync(authorId)).ToString();
 
         return Results.Ok(articles);
     }
@@ -171,4 +229,72 @@ public class ArticleController : Controller
             return Results.Problem(ex.Message);
         }
     }
+
+    [HttpPost]
+    [Route("{id}/click")]
+    [Authorize]
+    public Task<IResult> Click([FromRoute] string id, CancellationToken ct)
+        => EmitUserEvent(id, "ArticleClicked", metadata: null, success: Results.Accepted(), ct);
+
+    [HttpPost]
+    [Route("{id}/read")]
+    [Authorize]
+    public Task<IResult> Read([FromRoute] string id, CancellationToken ct)
+        => EmitUserEvent(id, "ArticleRead", metadata: null, success: Results.Accepted(), ct);
+
+    [HttpPost]
+    [Route("{id}/like")]
+    [Authorize]
+    public Task<IResult> Like([FromRoute] string id, CancellationToken ct)
+        => EmitUserEvent(id, "ArticleLiked", metadata: null, success: Results.NoContent(), ct);
+
+    [HttpPost]
+    [Route("{id}/dislike")]
+    [Authorize]
+    public Task<IResult> Dislike([FromRoute] string id, CancellationToken ct)
+        => EmitUserEvent(id, "ArticleDisliked", metadata: null, success: Results.NoContent(), ct);
+
+    [HttpPost]
+    [Route("{id}/share")]
+    [Authorize]
+    public Task<IResult> Share([FromRoute] string id, [FromBody] ShareArticleDto? dto, CancellationToken ct)
+    {
+        IDictionary<string, object?>? metadata = null;
+        if (!string.IsNullOrWhiteSpace(dto?.Channel))
+        {
+            metadata = new Dictionary<string, object?> { ["channel"] = dto.Channel };
+        }
+        return EmitUserEvent(id, "ArticleShared", metadata, success: Results.NoContent(), ct);
+    }
+
+    private async Task<IResult> EmitUserEvent(
+        string articleId,
+        string eventType,
+        IDictionary<string, object?>? metadata,
+        IResult success,
+        CancellationToken ct)
+    {
+        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (userId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            await _articleService.GetArticleByIdAsync(articleId);
+        }
+        catch (Exception ex)
+        {
+            return Results.NotFound(ex.Message);
+        }
+
+        await _userEventProducer.EmitAsync(eventType, userId, articleId, metadata, ct);
+        return success;
+    }
+}
+
+public class ShareArticleDto
+{
+    public string? Channel { get; set; }
 }

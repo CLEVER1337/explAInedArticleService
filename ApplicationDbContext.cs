@@ -27,6 +27,8 @@ public class ApplicationDbContext : DbContext
             entity.Property(a => a.AccessLevel).HasConversion<string>().HasMaxLength(32);
             entity.HasIndex(a => a.AuthorId);
             entity.HasIndex(a => a.Status);
+            entity.HasIndex(a => new { a.Status, a.PublishedAt });
+            entity.HasIndex(a => new { a.AuthorId, a.PublishedAt });
         });
 
         builder.Entity<OutboxEvent>(entity =>
