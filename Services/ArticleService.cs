@@ -77,8 +77,17 @@ public class ArticleService : IArticleService
                             .DefaultOperator(Operator.And)
                         )
                     )
+                    // `status.keyword`, not `status`. Nothing here creates an explicit mapping,
+                    // so Elasticsearch infers one: every string becomes `text` with a `.keyword`
+                    // sub-field. A term query is exact and unanalysed, while the text field holds
+                    // what the standard analyser produced — `published`, lowercased. Matching
+                    // "Published" against it therefore returns nothing, for every article, always.
+                    //
+                    // The failure is silent in the worst way: the query succeeds, the filter
+                    // excludes everything, and the endpoint answers 404 "No articles found",
+                    // which reads exactly like an empty corpus.
                     .Filter(f => f
-                        .Term(t => t.Field("status").Value(ArticleStatus.Published.ToString()))
+                        .Term(t => t.Field("status.keyword").Value(ArticleStatus.Published.ToString()))
                     )
                 )
             )
